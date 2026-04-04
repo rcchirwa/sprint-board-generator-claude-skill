@@ -28,6 +28,15 @@ This skill runs inside Claude Desktop (the desktop app). It won't work in the Cl
 ### A Trello account and board
 You need a free Trello account at [trello.com](https://trello.com) and at least one board set up where you want the cards to go.
 
+### A Trello Epic Power-Up (highly recommended)
+Epics do not work out of the box on Trello boards. To get full Epic functionality — including Epic grouping, progress tracking, and Epic-level views — you need to install a Trello Power-Up that adds Epic support. **Hello Epics** is a popular option. Without a Power-Up like this, Epic cards will appear on your board as regular cards with no Epic-specific behaviour.
+
+To add Hello Epics (or a similar Power-Up):
+1. Open your Trello board
+2. Click **Power-Ups** in the board menu
+3. Search for **Hello Epics** (or your preferred Epic booster)
+4. Click **Add** to install it on your board
+
 ### Two API keys — Trello
 The skill connects to Trello on your behalf. You need to generate a personal API key and token from Trello (it's free and takes about 2 minutes):
 
