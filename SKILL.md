@@ -17,12 +17,13 @@ description: >
 
 # Sprint Board Generator
 
-A three-stage pipeline: **decompose → review → push**. Takes a plain-language
-product roadmap, runs it through a Virtual Product Owner persona to produce
-structured Epics and Stories, pauses for your approval, then pushes idempotent
-cards to a live Trello board — entirely within this conversation.
+A four-stage pipeline: **validate → decompose → verify → push**. Takes a
+plain-language product roadmap, confirms the target Trello destination, decomposes
+it into Epics and Stories, pauses for your review, then pushes everything to Trello
+automatically — entirely within this conversation.
 
-The only human step is the review. Everything else is automated.
+There are exactly **two human steps**: confirming the target board/list, and
+approving the proposed Epics and Stories. Everything else runs without interruption.
 
 ---
 
@@ -30,7 +31,7 @@ The only human step is the review. Everything else is automated.
 
 ### 1. Credentials file
 
-The push script reads credentials from a local file — no need to paste keys into
+The scripts read credentials from a local file — no need to paste keys into
 the chat. Create it once:
 
 ```bash
@@ -59,20 +60,103 @@ Populate it with:
 
 ### 2. Script location
 
-Save `upsert_cards.py` to a permanent location. The recommended path:
+Save both scripts to a permanent location. The recommended path:
 
 ```bash
 mkdir -p ~/tools/trello
 cp scripts/upsert_cards.py ~/tools/trello/upsert_cards.py
+cp scripts/validate_list.py ~/tools/trello/validate_list.py
 ```
 
 ---
 
-## Stage 1 — Virtual PO Decomposition
+## Stage 1 — Validate Target List *(human pause #1)*
+
+**This stage runs before any decomposition or JSON generation.** Do not parse
+the roadmap or generate any JSON until the user has explicitly confirmed the
+target list.
+
+### Step 1a — Determine which List ID to validate
+
+Check whether the user has provided a List ID in their message (e.g. pasted
+inline, mentioned by name, or flagged as a correction). Use that ID if present.
+Otherwise, fall back to `default_list_id` in the credentials file.
+
+> If no list ID has been provided anywhere and the credentials file is missing or
+> incomplete, stop and ask:
+>
+> "I need a Trello List ID to know where to push the cards. You can find it by
+> running `python3 ~/tools/trello/list_boards.py` — or paste it here directly."
+
+### Step 1b — Run validation
+
+If the List ID comes from the user's message (i.e. it differs from the value
+currently in the credentials file), pass `--update-creds` so the file is kept
+in sync:
+
+```bash
+python3 ~/tools/trello/validate_list.py --list-id <LIST_ID> --update-creds
+```
+
+If the List ID comes from the credentials file with no override, run without flags:
+
+```bash
+python3 ~/tools/trello/validate_list.py
+```
+
+> If `requests` isn't available yet, install it first:
+> `pip install requests --break-system-packages --quiet`
+
+**If the script exits with an error** (list not found, bad credentials, file
+missing) — surface the full error output to the user, point them to the
+Prerequisites section, and stop. Do not proceed until this is resolved.
+
+### Step 1c — Present result and wait for confirmation
+
+**If the script succeeds**, it prints something like:
+
+```
+✅ List ID validated successfully
+   Board : My Project Board
+   URL   : https://trello.com/b/XXXXXX
+   List  : Backlog
+   List ID: 64abc123def456...
+```
+
+Present this clearly to the user and ask **exactly this question** — do not
+paraphrase or skip it:
+
+> "I found the following Trello destination:
+>
+> **Board:** [Board Name]
+> **List:** [List Name]
+> **URL:** [Board URL]
+>
+> Is this the right place to push the sprint cards? Say **yes** to continue,
+> or give me the correct List ID and I'll re-validate."
+
+**Stop here. Do not touch the roadmap or generate any JSON until the user responds.**
+
+- **User confirms** (any of: "yes", "correct", "that's right", "go ahead",
+  "looks good") → proceed to Stage 2 immediately.
+- **User provides a corrected List ID** → return to Step 1b with the new ID,
+  pass `--update-creds`, show the updated result, and ask for confirmation again.
+  Repeat until confirmed or the user cancels.
+- **User cancels** → stop the pipeline entirely and acknowledge.
+
+---
+
+## Stage 2 — Virtual PO Decomposition *(fully automated)*
+
+Only begin this stage after the user has confirmed the destination in Stage 1.
+
+Once the destination is confirmed, run the full decomposition without pausing.
+Do not ask clarifying questions during this stage — make reasonable decisions
+and proceed.
 
 You are acting as a **Certified Scrum Product Owner with 10+ years of enterprise
-Agile experience**. Your job is to decompose the roadmap the user provides into a
-clean, Scrum-ready backlog of Epics and Stories following these rules exactly.
+Agile experience**. Decompose the roadmap into a clean, Scrum-ready backlog of
+Epics and Stories following these rules exactly.
 
 ### Decomposition rules
 
@@ -99,10 +183,10 @@ clean, Scrum-ready backlog of Epics and Stories following these rules exactly.
 | Could Have | Nice to have; deprioritize under capacity pressure |
 | Won't Have | Explicitly out of scope this sprint |
 
-### Output format for this stage
+### Output format
 
-Present the decomposition in a readable summary — not raw JSON. Use this template
-for each Epic:
+Present the full decomposition immediately after finishing — do not pause partway
+through. Use this template for each Epic:
 
 ```
 [EPIC-01] Capability Name
@@ -112,31 +196,35 @@ for each Epic:
     [EPIC-01-S02] As a [role]...   (X hrs, Should Have)
 ```
 
----
-
-## Stage 2 — Verification (the only human step)
-
-After presenting the decomposition, **stop and ask**:
-
-> "Does this look right? Any Epics or Stories to add, remove, or adjust before I
-> push to Trello? If it looks good, just say 'push it'."
-
-Wait for explicit approval. Accept any of: "push it", "looks good", "go ahead",
-"approved", "yes", or similar. If the user requests changes, apply them, show the
-updated summary once, then ask for confirmation again before proceeding.
-
-**Do not proceed to Stage 3 until the user has explicitly approved.**
+Finish by showing the total estimated hours and the sprint capacity check result,
+then hand off directly to Stage 3.
 
 ---
 
-## Stage 3 — Venv Setup, JSON Generation & Trello Push
+## Stage 3 — Story Verification *(human pause #2)*
 
-Once approved, complete these steps in sequence without pausing.
+After presenting the full decomposition, stop and ask:
 
-### Step 3a — Set up the virtual environment
+> "Does this look right? Any Epics or Stories to add, remove, or adjust?
+> If it looks good, just say 'push it' and I'll handle the rest automatically."
 
-Check whether a venv already exists at `~/tools/trello/.venv`. Create it if not,
-then activate it and ensure `requests` is installed:
+Accept any of: "push it", "looks good", "go ahead", "approved", "yes", or similar.
+
+If the user requests changes, apply them, show the updated summary once, then
+ask for confirmation again. Do not proceed to Stage 4 until the user has
+explicitly approved.
+
+**This is the last human step. Stage 4 runs completely automatically.**
+
+---
+
+## Stage 4 — Automated Push Pipeline *(zero pauses)*
+
+Once the user approves, execute all of the following steps in sequence without
+stopping or asking for input. Report progress inline as you go so the user can
+see what's happening.
+
+### Step 4a — Set up the virtual environment
 
 ```bash
 if [ ! -d ~/tools/trello/.venv ]; then
@@ -149,14 +237,14 @@ pip install requests --quiet
 echo "Venv ready: $(python3 --version)"
 ```
 
-If `python3` is not found, tell the user and stop. Do not attempt to install Python.
+If `python3` is not found, tell the user and stop — do not attempt to install Python.
 
-### Step 3b — Generate the JSON
+### Step 4b — Generate the JSON
 
 Build the full card JSON and write it to `/tmp/trello_sprint_cards.json`.
 
-The JSON is a flat array of card objects. Generate one card per Epic (as a summary
-card) followed by one card per Story, in Epic order. Use this exact structure:
+The JSON is a flat array of card objects — one card per Epic (summary card)
+followed by one card per Story, in Epic order:
 
 ```json
 [
@@ -183,7 +271,7 @@ card) followed by one card per Story, in Epic order. Use this exact structure:
 - Story cards get their MoSCoW label only
 - Use exact label strings: `EPIC`, `MUST HAVE`, `SHOULD HAVE`, `COULD HAVE`, `WON'T HAVE`
 
-### Step 3c — Run the upsert script
+### Step 4c — Push to Trello
 
 ```bash
 source ~/tools/trello/.venv/bin/activate
@@ -191,25 +279,21 @@ python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json
 ```
 
 The script reads credentials automatically from `~/.config/trello/credentials.json`.
-No need to pass `--key`, `--token`, or `--list-id` as arguments.
-
-**If the credentials file is missing**, tell the user and point them to the
-Prerequisites section above. Do not attempt to read or prompt for credentials.
 
 **Dry run option** — if the user passed a `--dry-run` flag or asked to validate
-without pushing, run:
+without pushing:
 
 ```bash
 source ~/tools/trello/.venv/bin/activate
 python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json --dry-run
 ```
 
-### Step 3d — Report results
+### Step 4d — Report results
 
-After the script completes, tell the user:
-- How many cards were **created** vs **updated** (idempotent — safe to re-run)
+After the script completes, report:
+- How many cards were **created** vs **updated** (safe to re-run — idempotent)
 - Any cards that **failed**, with the error message
-- A direct link to the Trello board (extracted from the card URLs in script output)
+- A direct link to the Trello board (extracted from card URLs in script output)
 
 **Example report:**
 ```
@@ -252,7 +336,8 @@ will be updated.
 |---|---|
 | "ERROR: Missing required credentials" | Create `~/.config/trello/credentials.json` per Prerequisites |
 | "ERROR: Invalid API key or token" | Regenerate token at https://trello.com/power-ups/admin |
-| "ERROR: List ID not found" | Run `list_boards.py` to find the correct ID |
+| "ERROR: List ID not found" | Run `list_boards.py` to browse all lists and copy the correct ID |
+| List validation fails at Stage 1 | Run `validate_list.py --list-id <ID>` manually to debug |
 | Card shows CREATED instead of UPDATED | The ID tag `[EPIC-XX]` was removed from the Trello card title — restore it |
-| `ModuleNotFoundError: requests` | The venv step failed; re-run Stage 3a manually |
+| `ModuleNotFoundError: requests` | Run `pip install requests --break-system-packages`, then retry |
 | `python3: command not found` | Install Python 3 at https://www.python.org/downloads/ |
