@@ -45,37 +45,39 @@ cards", "run the upsert", or any similar phrasing where no new roadmap is
 provided.
 
 **Sandbox constraint:** The Cowork sandbox is a Linux container — it cannot
-reach the Trello API or open Mac applications. The push must be run from the
-user's Mac terminal. This path's job is to resolve the exact project path and
-give the user one clean, ready-to-run command — not three separate commands.
+reach the Trello API. The push is handled by a Mac LaunchAgent that watches
+for a trigger file. Claude writes the trigger file (local file op, works in
+the sandbox), macOS runs the push automatically. No user action required.
 
-### Step A — Resolve the exact project folder path
-
-Run this to resolve the glob to a real path:
+### Step A — Write the trigger file
 
 ```bash
-ls -d ~/Documents/Claude/Vanish*/ 2>/dev/null | head -1
+touch /tmp/trello_push.trigger
+echo "Trigger written — push running in background."
 ```
 
-If nothing is returned, tell the user the folder wasn't found and ask them
-to confirm the path.
+The LaunchAgent (`com.user.trello-push`) detects the file and runs
+`~/tools/trello/push-vanish.sh` automatically. Results are logged to
+`/tmp/trello_push.log`.
 
-### Step B — Output a single ready-to-run command
+### Step B — Confirm to the user
 
-Using the resolved path from Step A (e.g. `~/Documents/Claude/Vanish Clothing — Strategic Playbook Project/`),
-output exactly this — one chained command the user can paste directly into
-their Mac terminal:
+Tell the user:
+
+> "Push triggered — the LaunchAgent is running it now. Check
+> `/tmp/trello_push.log` in a few seconds for the results."
+
+Do not ask the user to do anything else.
+
+**If the LaunchAgent is not set up** (touch fails or user hasn't run the
+one-time setup), fall back to outputting one chained command:
 
 ```
-source ~/tools/trello/.venv/bin/activate && cd "<RESOLVED_PATH>" && python3 trello-scripts/upsert_cards.py --cards vanish-sprint-trello-cards.json
+source ~/tools/trello/.venv/bin/activate && cd ~/Documents/Claude/Vanish\ Clothing\ —\ Strategic\ Playbook\ Project/ && python3 trello-scripts/upsert_cards.py --cards vanish-sprint-trello-cards.json
 ```
 
-Format it as a code block. Tell the user:
-
-> "Paste this into your Mac terminal — it's one command, just hit return:"
-
-Do **not** ask the user to paste the output back. Do **not** say "let me
-know when it's done." Just give them the command and stop.
+Tell the user: "Paste this into your Mac terminal — or run the LaunchAgent
+setup once to make this fully automatic in future."
 
 ---
 
@@ -337,23 +339,29 @@ Flat array — one card per Epic (summary) followed by one card per Story:
 
 ### Step 4b — Push to Trello
 
-The Cowork sandbox cannot reach the Trello API. Output one chained command
-the user can paste into their Mac terminal — do not ask them to run three
-separate commands, and do not ask them to paste output back:
+The Cowork sandbox cannot reach the Trello API. Write the trigger file and
+let the Mac LaunchAgent handle the push:
 
-> "Paste this into your Mac terminal — it's one command, just hit return:"
-
-```
-source ~/tools/trello/.venv/bin/activate && python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json
+```bash
+touch /tmp/trello_push.trigger
+echo "Trigger written — LaunchAgent is pushing the cards now."
 ```
 
-**Dry run** — if the user asked to validate without pushing, append `--dry-run`:
+Tell the user:
+> "Push triggered — check `/tmp/trello_push.log` in a few seconds for results."
+
+**Dry run** — if the user asked to validate without pushing, skip the trigger
+and instead output this one command for them to paste:
 
 ```
 source ~/tools/trello/.venv/bin/activate && python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json --dry-run
 ```
 
-Give them the command and stop. Do not add follow-up instructions.
+**If the LaunchAgent is not set up**, fall back to the single chained command:
+
+```
+source ~/tools/trello/.venv/bin/activate && python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json
+```
 
 ### Step 4c — Report results
 
