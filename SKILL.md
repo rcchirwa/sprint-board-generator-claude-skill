@@ -44,46 +44,38 @@ cards", "re-push", "push vanish cards", "push from JSON", "sync existing
 cards", "run the upsert", or any similar phrasing where no new roadmap is
 provided.
 
-**Why this path works differently from the full pipeline:**
-The Cowork sandbox blocks outbound HTTP calls made by Python scripts, so
-running `upsert_cards.py` directly here will fail with a network error.
-The solution is to use `osascript` to open a Terminal window on the Mac,
-which runs outside the sandbox with full network access.
+**Sandbox constraint:** The Cowork sandbox is a Linux container — it cannot
+reach the Trello API or open Mac applications. The push must be run from the
+user's Mac terminal. This path's job is to resolve the exact project path and
+give the user one clean, ready-to-run command — not three separate commands.
 
-Skip Stages 0–3. Execute the following two steps without stopping or asking
-the user anything.
+### Step A — Resolve the exact project folder path
 
-### Step A — Resolve project folder
+Run this to resolve the glob to a real path:
 
 ```bash
-PROJECT_DIR=$(ls -d ~/Documents/Claude/Vanish*/ 2>/dev/null | head -1)
-if [ -z "$PROJECT_DIR" ]; then
-  echo "ERROR: Could not find ~/Documents/Claude/Vanish*/ — check the folder exists."
-  exit 1
-fi
-echo "Project folder: $PROJECT_DIR"
+ls -d ~/Documents/Claude/Vanish*/ 2>/dev/null | head -1
 ```
 
-### Step B — Launch Terminal and run the push
+If nothing is returned, tell the user the folder wasn't found and ask them
+to confirm the path.
 
-Use `osascript` to open a new Terminal window and run the commands there.
-This bypasses the sandbox — Terminal has full network access:
+### Step B — Output a single ready-to-run command
 
-```bash
-PROJECT_DIR=$(ls -d ~/Documents/Claude/Vanish*/ 2>/dev/null | head -1)
-osascript -e "tell application \"Terminal\"
-  activate
-  do script \"source ~/tools/trello/.venv/bin/activate && cd '$PROJECT_DIR' && python3 trello-scripts/upsert_cards.py --cards vanish-sprint-trello-cards.json && echo '✅ DONE'\"
-end tell"
+Using the resolved path from Step A (e.g. `~/Documents/Claude/Vanish Clothing — Strategic Playbook Project/`),
+output exactly this — one chained command the user can paste directly into
+their Mac terminal:
+
+```
+source ~/tools/trello/.venv/bin/activate && cd "<RESOLVED_PATH>" && python3 trello-scripts/upsert_cards.py --cards vanish-sprint-trello-cards.json
 ```
 
-After running this, tell the user:
+Format it as a code block. Tell the user:
 
-> "I've opened a Terminal window and started the push. Watch it for the
-> results — you'll see ✅ DONE when it finishes. Paste the output back
-> if you'd like me to confirm the results."
+> "Paste this into your Mac terminal — it's one command, just hit return:"
 
-Do not wait for output. The push runs in the Terminal window, not here.
+Do **not** ask the user to paste the output back. Do **not** say "let me
+know when it's done." Just give them the command and stop.
 
 ---
 
@@ -345,28 +337,23 @@ Flat array — one card per Epic (summary) followed by one card per Story:
 
 ### Step 4b — Push to Trello
 
-The Cowork sandbox blocks outbound HTTP from Python scripts. Use `osascript`
-to open a Terminal window that runs outside the sandbox:
+The Cowork sandbox cannot reach the Trello API. Output one chained command
+the user can paste into their Mac terminal — do not ask them to run three
+separate commands, and do not ask them to paste output back:
 
-```bash
-osascript -e 'tell application "Terminal"
-  activate
-  do script "source ~/tools/trello/.venv/bin/activate && python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json && echo \"✅ DONE\""
-end tell'
+> "Paste this into your Mac terminal — it's one command, just hit return:"
+
+```
+source ~/tools/trello/.venv/bin/activate && python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json
 ```
 
-**Dry run** — if the user asked to validate without pushing:
+**Dry run** — if the user asked to validate without pushing, append `--dry-run`:
 
-```bash
-osascript -e 'tell application "Terminal"
-  activate
-  do script "source ~/tools/trello/.venv/bin/activate && python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json --dry-run && echo \"✅ DONE\""
-end tell'
+```
+source ~/tools/trello/.venv/bin/activate && python3 ~/tools/trello/upsert_cards.py --cards /tmp/trello_sprint_cards.json --dry-run
 ```
 
-After running either command, tell the user:
-> "I've opened a Terminal window and started the push. Watch it for results —
-> you'll see ✅ DONE when it finishes."
+Give them the command and stop. Do not add follow-up instructions.
 
 ### Step 4c — Report results
 
