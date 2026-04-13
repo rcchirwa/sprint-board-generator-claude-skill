@@ -12,7 +12,10 @@ description: >
   sprint board", "re-run the pipeline", or "sync my Trello board from this
   roadmap". This skill is the right choice any time the input is a roadmap,
   playbook, or feature list and the desired output is a structured Trello board
-  with Epics and Stories.
+  with Epics and Stories. Also triggers when the user says "push the existing
+  cards", "re-push", "push vanish cards", "push from JSON", "sync existing
+  cards", "run the upsert", or any variation meaning run the push script on an
+  already-generated cards file without decomposing a new roadmap.
 ---
 
 # Sprint Board Generator
@@ -26,6 +29,62 @@ entirely within this conversation.
 There are exactly **two human steps**: confirming the target board/list, and
 approving the proposed Epics and Stories. Everything else — venv setup,
 dependency install, script execution — runs automatically without asking.
+
+> **Re-pushing existing cards?** Skip straight to the
+> [Fast Path — Re-Push Existing Cards](#fast-path--re-push-existing-cards)
+> section below. No pipeline needed.
+
+---
+
+## Fast Path — Re-Push Existing Cards *(zero pauses)*
+
+Use this path when the user wants to push a pre-existing JSON cards file to
+Trello **without** decomposing a new roadmap. Triggers: "push the existing
+cards", "re-push", "push vanish cards", "push from JSON", "sync existing
+cards", "run the upsert", or any similar phrasing where no new roadmap is
+provided.
+
+Skip Stages 0–3. Execute the following three steps in sequence without
+stopping or asking the user anything.
+
+### Step A — Activate venv
+
+```bash
+source ~/tools/trello/.venv/bin/activate
+echo "✅ venv active: $(python3 --version)"
+```
+
+If the venv doesn't exist, run Stage 0 first to create it, then continue.
+
+### Step B — Resolve project folder and push
+
+```bash
+source ~/tools/trello/.venv/bin/activate
+PROJECT_DIR=$(ls -d ~/Documents/Claude/Vanish*/ 2>/dev/null | head -1)
+
+if [ -z "$PROJECT_DIR" ]; then
+  echo "ERROR: Could not find ~/Documents/Claude/Vanish*/ — check the folder exists."
+  exit 1
+fi
+
+echo "📁 Project folder: $PROJECT_DIR"
+cd "$PROJECT_DIR"
+python3 trello-scripts/upsert_cards.py --cards vanish-sprint-trello-cards.json
+```
+
+### Step C — Report results
+
+Report the same summary format as Stage 4c:
+
+```
+✅ Sprint board pushed successfully.
+   Created: X cards
+   Updated: X cards
+   Failed:  X cards
+   Board: https://trello.com/b/XXXXXX
+```
+
+Include the full error message for any failures. Done — no further action needed.
 
 ---
 
