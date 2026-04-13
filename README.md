@@ -130,6 +130,102 @@ If you want to see what cards would be generated without pushing anything to Tre
 
 ---
 
+## Mac/Apple computer workaround — automated push via LaunchAgent
+
+When this skill runs inside Cowork, Claude operates in a Linux container
+sandbox that cannot make outbound network calls. This means it cannot push
+cards to Trello directly. By default, Claude will give you a single command
+to paste into your Mac terminal.
+
+To eliminate that manual step entirely, set up a **Mac LaunchAgent** — a
+background daemon that watches for a trigger file. Claude writes the trigger
+(a local file operation that works inside the sandbox), and macOS
+automatically runs the push script on your behalf.
+
+**This is a one-time setup. After it's done, saying "push the cards" in
+Cowork will push to Trello with no further action from you.**
+
+### Step 1 — Create the push script
+
+Open your Mac terminal and run:
+
+```bash
+mkdir -p ~/tools/trello
+cat > ~/tools/trello/push-vanish.sh << 'EOF'
+#!/bin/bash
+rm -f /tmp/trello_push.trigger
+source ~/tools/trello/.venv/bin/activate
+cd ~/Documents/Claude/Vanish\ Clothing\ —\ Strategic\ Playbook\ Project/
+python3 trello-scripts/upsert_cards.py --cards vanish-sprint-trello-cards.json
+EOF
+chmod +x ~/tools/trello/push-vanish.sh
+```
+
+> If your project folder has a different name, update the `cd` path accordingly.
+
+### Step 2 — Install the LaunchAgent
+
+```bash
+cat > ~/Library/LaunchAgents/com.user.trello-push.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.user.trello-push</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/YOUR_MAC_USERNAME/tools/trello/push-vanish.sh</string>
+  </array>
+  <key>WatchPaths</key>
+  <array>
+    <string>/tmp/trello_push.trigger</string>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/tmp/trello_push.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/trello_push.log</string>
+</dict>
+</plist>
+EOF
+```
+
+Replace `YOUR_MAC_USERNAME` with your actual username (run `whoami` if unsure), then load the agent:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.user.trello-push.plist
+```
+
+### Step 3 — Verify it works
+
+```bash
+touch /tmp/trello_push.trigger
+sleep 3
+cat /tmp/trello_push.log
+```
+
+You should see output from the upsert script. If you see errors, check that
+the venv exists (`ls ~/tools/trello/.venv`) and that the project folder path
+in `push-vanish.sh` is correct.
+
+### How it works after setup
+
+1. You say "push the Vanish cards" in Cowork
+2. Claude writes `/tmp/trello_push.trigger` (local file op, works in sandbox)
+3. macOS detects the file and fires `push-vanish.sh` automatically
+4. Cards are pushed to Trello — no terminal interaction needed
+5. Results are written to `/tmp/trello_push.log`
+
+### To uninstall
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.user.trello-push.plist
+rm ~/Library/LaunchAgents/com.user.trello-push.plist
+```
+
+---
+
 ## Troubleshooting
 
 **"Missing required credentials"** — Check that your `~/.config/trello/credentials.json` file exists and contains valid values.
@@ -139,6 +235,8 @@ If you want to see what cards would be generated without pushing anything to Tre
 **"List ID not found"** — Run `list_boards.py` to confirm the list ID in your credentials file is correct.
 
 **Card shows as CREATED instead of UPDATED on re-run** — The ID tag (e.g. `[EPIC-01]`) was manually removed from the card title on Trello. Restore it and re-run.
+
+**LaunchAgent not firing** — Run `launchctl list | grep trello-push` to confirm the agent is loaded. If it's missing, re-run the `launchctl load` command from Step 2. Also check that `/tmp/trello_push.trigger` is being created (`ls -la /tmp/trello_push.trigger` right after asking Claude to push).
 
 ---
 
