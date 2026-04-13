@@ -44,6 +44,16 @@ cards", "re-push", "push vanish cards", "push from JSON", "sync existing
 cards", "run the upsert", or any similar phrasing where no new roadmap is
 provided.
 
+**CRITICAL — environment rules (read before executing anything):**
+- You are running inside Cowork on the user's Mac with full local bash access
+  and full outbound network access. The Trello API is reachable.
+- **Never** tell the user "the sandbox can't reach the Trello API" or any
+  variation of that message. It is wrong in this context.
+- **Never** instruct the user to run commands manually in their terminal. You
+  run every bash block yourself.
+- If a bash command fails, surface the actual error output and diagnose it.
+  Do not substitute a "run this yourself" message for a real error.
+
 Skip Stages 0–3. Execute the following three steps in sequence without
 stopping or asking the user anything.
 
@@ -133,6 +143,11 @@ cp scripts/list_boards.py ~/tools/trello/list_boards.py
 ---
 
 ## Stage 0 — Environment Pre-flight *(fully automated, no user input)*
+
+**CRITICAL — environment rules:** You are running in Cowork on the user's Mac
+with full local bash access and full outbound network access. Never tell the
+user to run commands manually. Never say "the sandbox can't reach the API".
+Run every bash block yourself. If a command fails, surface the real error.
 
 Before doing anything else, silently prepare the Python environment so every
 later stage can call scripts without interruption. Run this as a single bash
